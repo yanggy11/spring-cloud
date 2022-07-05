@@ -1,0 +1,41 @@
+server:
+  port: 1986
+
+spring:
+  application:
+    name: order-center
+  profiles:
+    active: test
+  cloud:
+    nacos:
+      discovery:
+        server-addr: 101.42.97.197:8848
+        namespace: ${spring.profiles.active}
+      config:
+        prefix: ${spring.application.name}
+        fileExtension: yaml
+        server-addr: 101.42.97.197:8848
+        namespace: ${spring.profiles.active}
+        refresh-enabled: true
+    sentinel:
+      eager: true
+      transport:
+        dashboard: localhost:8080
+        heartbeatIntervalMs: 10000
+        clientIp: 127.0.0.1
+      datasource:
+        ds:
+          nacos:
+            server-addr: 101.42.97.197:8848
+            namespace: ${spring.profiles.active}
+            data-id: ${spring.application.name}-sentinel
+            group-id: DEFAULT_GROUP
+            rule-type: flow
+feign:
+  sentinel:
+    enabled: true
+  client:
+    config:
+      default:
+        connect-timeout: 5000
+        read-timeout: 5000

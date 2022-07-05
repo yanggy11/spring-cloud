@@ -1,0 +1,355 @@
+
+#### 如何使用？
+
+1、引入pom 依赖
+```
+<dependency>
+    <groupId>org.springframework.cloud</groupId>
+    <artifactId>spring-cloud-starter-openfeign</artifactId>
+</dependency>
+```
+
+2、主类增加@EnableFeignClients
+```
+@SpringBootApplication
+@EnableFeignClients
+public class Application {
+
+    public static void main(String[] args) {
+        SpringApplication.run(Application.class, args);
+    }
+
+}
+```
+
+3、定义UserCenterClient
+```
+@FeignClient(name = "user-center")
+public interface UserCenterFeign {
+    @GetMapping("/test")
+    String test();
+}
+```
+
+#### feign配置方式
+
+1、全局配置
+
+    方式一：yml文件配置
+```
+feign:
+    client:
+        config:
+            default:
+                connectTimeout: 5000
+                readTimeout: 5000
+                loggerLevel: full
+```
+
+    方式二
+```
+    @EnableFeignClients(defaultConfiguration = DefaultFeignConfiguration.class)
+    @Configuration
+    public class DefaultFeignConfiguration {
+
+        @Bean
+        public Request.Options options() {
+            return new Request.Options(5, TimeUnit.SECONDS, 10, TimeUnit.SECONDS, true);
+        }
+    }
+```
+2、局部配置
+
+    方式一：yml文件配置
+```
+feign:
+    client:
+        config:
+            feignName:
+                connectTimeout: 5000
+                readTimeout: 5000
+                loggerLevel: full
+```
+    方式二
+```
+    @FeignClient(name = "user-center", configuration = {UserCenterConfiguration.class})
+
+    @Configuration
+    public class UserCenterConfiguration {
+        @Bean
+        public Request.Options options() {
+            return new Request.Options(5, TimeUnit.SECONDS, 10, TimeUnit.SECONDS, true);
+        }
+    }
+```
+
+注意：方式一和方式二都配置了的话，最终的配置会选择方式一。
+
+#### feign配置项
+
+1、超时时间
+
+connectTimeout: 连接到服务超时时间
+
+readTimeout: 执行程序到返回结果超时时间
+
+```
+feign:
+    client:
+        config:
+            default | feignName:
+                connectTimeout: 5000
+                readTimeout: 5000
+```
+
+2、手动创建feign client
+
+Feign.builder.client方法
+
+3、整合sentinel
+
+引入sentinel依赖
+
+```
+<dependency>
+    <groupId>com.alibaba.cloud</groupId>
+    <artifactId>spring-cloud-starter-alibaba-sentinel</artifactId>
+</dependency>
+```
+
+增加feign配置,以下配置缺一不可，需要都加上，才能起作用
+
+```
+feign:
+  sentinel:
+    enabled: true
+```
+
+方式一：
+
+```
+@FeignClient(name = "user-center", configuration = {UserCenterConfiguration.class}, fallback = UserCenterFeign.UserCenterFallback.class)
+public interface UserCenterFeign {
+    @GetMapping("/test")
+    String test();
+
+    @Component
+    class UserCenterFallback implements UserCenterFeign{
+
+        @Override
+        public String test() {
+
+            throw new NoFallbackAvailableException("Boom!", new RuntimeException());
+        }
+    }
+}
+```
+
+方式二  可以获取熔断原因
+
+```
+@FeignClient(name = "user-center", configuration = {UserCenterFeign.UserCenterConfiguration.class}, fallbackFactory = UserCenterFeign.UserCenterFallbackFactory.class)
+public interface UserCenterFeign {
+    @GetMapping("/test")
+    String test();
+
+    //使用fallback工厂，可以获取到异常原因
+    @Log4j2
+    @Component
+    class UserCenterFallbackFactory implements FallbackFactory<UserCenterFallback> {
+
+        @Override
+        public UserCenterFallback create(Throwable cause) {
+            log.error("[UserCenterFallbackFactory.create]", cause);
+            return new UserCenterFallback();
+        }
+
+    }
+
+    class UserCenterFallback implements UserCenterFeign{
+
+        @Override
+        public String test() {
+            return "Boom!";
+        }
+    }
+
+    @Configuration
+    class UserCenterConfiguration {
+        @Bean
+        public Request.Options options() {
+            return new Request.Options(5, TimeUnit.SECONDS, 10, TimeUnit.SECONDS, true);
+        }
+    }
+}
+```
+
+4、请求响应压缩
+
+```
+feign:
+    compression:
+        request:
+        response:
+```
+
+5、feign日志
+
+日志级别：
+
+- NONE 默认，没有开启日志
+- BASIC 打印基本的信息，请求方法、url以及返回code和执行时间
+- HEADERS BASIC 和请求headers
+- FULL headers,请求body以及元数据
+
+
+```
+feign:
+  client:
+    config:
+      default:
+        loggerLevel: FULL
+
+logging:
+  level:
+    com.yanggy.order.feigin.UserCenterFeign: DEBUG
+```
+
+##### feign 配置大全
+
+https://docs.spring.io/spring-cloud-openfeign/docs/3.0.6/reference/html/appendix.html
+
+##### feign源码
+
+入口： EnableFeignClients
+
+处理类： FeignClientsRegistrar
+
+```
+@Retention(RetentionPolicy.RUNTIME)
+@Target({ElementType.TYPE})
+@Documented
+@Import({FeignClientsRegistrar.class})
+public @interface EnableFeignClients {
+    String[] value() default {};
+
+    String[] basePackages() default {};
+
+    Class<?>[] basePackageClasses() default {};
+
+    Class<?>[] defaultConfiguration() default {};
+
+    Class<?>[] clients() default {};
+}
+```
+
+```
+@Override
+    public void registerBeanDefinitions(AnnotationMetadata metadata, BeanDefinitionRegistry registry) {
+        // 处理defaultConfiguration，加载feign全局配置
+        registerDefaultConfiguration(metadata, registry);
+        //扫描@FeignClient，加载局部配置， 生成beandefinition，默认@FeignClient实例是懒加载的，有需要可以重写FeignClientsRegistrar该类，包名、类名完全一致。
+        registerFeignClients(metadata, registry);
+    }
+```
+
+
+##### feign性能优化
+
+1、日志   开启日志会影响性能 尽量用basic或none
+
+2、http connection 优化
+
+默认使用UrlConnection 不支持线程池，不建议使用
+
+使用HttpClient 或OkHttp替代UrlConnection
+
+引入依赖
+
+```
+<dependency>
+    <groupId>io.github.openfeign</groupId>
+    <artifactId>feign-httpclient</artifactId>
+</dependency>
+```
+
+配置连接池参数等
+
+```
+feign:
+  client:
+    config:
+      default:
+        loggerLevel: BASIC
+  httpclient:
+    enabled: true # 支持http client开关
+    max-connections: 200
+    max-connections-per-route: 50
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
