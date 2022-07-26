@@ -1,0 +1,113 @@
+自定义分区器
+
+自定义类，实现接口Partitioner.partition方法
+
+```
+public class Customepartitioner implements Partitioner {
+    @Override
+    public int partition(String topic, Object key, byte[] keyBytes, Object value, byte[] valueBytes, Cluster cluster) {
+        //获取数据
+        String msg = value.toString();
+        int partition = 0;
+        if(!msg.contains("atguigu")) {
+            partition = 1;
+        }
+
+        return partition;
+    }
+
+    @Override
+    public void close() {
+    }
+
+    @Override
+    public void configure(Map<String, ?> configs) {
+    }
+}
+```
+生产者配代码中配置
+
+```
+ public static void main(String[] args) {
+        //1、创建卡夫卡生产者对象
+        Properties properties = new Properties();
+        properties.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, "101.35.46.92:9092");
+        properties.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.StringSerializer");
+        properties.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.StringSerializer");
+        //关联自定义区分器
+        properties.put(ProducerConfig.PARTITIONER_CLASS_CONFIG, "com.kafka.partitioner.Customepartitioner");
+
+        KafkaProducer<String, String> producer = null;
+
+        try{
+            producer = new KafkaProducer<>(properties);
+
+            //异步发送数据
+            for (int i = 0; i < 5; i++) {
+                //异步发送
+                producer.send(new ProducerRecord<>("test", "test" + i), ((metadata, exception) -> {
+                    if(null != exception) {
+                        exception.printStackTrace();
+                        return;
+                    }
+
+                    System.out.println("主题:" + metadata.topic() + " 分区:" + metadata.partition());
+                }));
+
+//                producer.send(new ProducerRecord<>("canal_test", "同步发送" + i)).get();
+
+                TimeUnit.SECONDS.sleep(1);
+            }
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }finally {
+            //关闭生产者
+            if(null != producer) {
+                producer.close();
+            }
+        }
+    }
+```
+
+生产者提高吞吐量
+
+1、参数配置
+
+linger.ms 默认为0，有数据就发送，不需要等到batch.size,修改5-100ms，
+
+batch.size 默认16k，可以修改为32K
+
+2、压缩数据
+
+compression.type=snappy
+
+RecordAccumulator：缓冲区大小 32M,可以修改为64M
+
+
+数据可靠性
+
+ack
+
+- 0 生产者发送过来的数据，不需要等到落盘应答  还没落盘，leader挂了，会导致丢数据
+- 1 生产者发送过来的数据，leader收到数据后应答，follower副本还没有同步数据，leader挂了，会导致丢数据。
+- -1（all) 生产者发送过来的数据，leader和ISR队列里的所有节点收到数据后应答，
+
+Leader维护了一个动态的in-sync replica set（ISR），意为和leader保持同步的Follower + Leader集合（leader:0, isr:01,2).
+
+如果follower长时间未向leader发送通信请求或同步数据，则该follower将被踢出ISR。该时间由replica.lag.time.max.ms参数设定，默认30s。
+
+数据完全可靠条件 = ACK级别设置为-1 + 分区副本大于等于2 + ISR里应答的最小副本数量大于等于2
+
+可靠性总结：
+
+acks=0，生产者发送过来数据就不管了，可靠性差，效率高;
+acks=1，生产者发送过来数据Leader应答，可靠性中等，效率中等;
+acks=-1，生产者发送过来数据Leader和ISR队列里面所有Follwer应答，可靠性高，效率低;
+
+在生产环境中，acks=0很少使用;acks=1，一般用于传输普通日志，允许丢个别数据;acks=-1，一般用于传输和钱相关的数据， 对可靠性要求比较高的场景。
+
+数据重复分析
+acks = -1 在leader和follower落盘后还未应答，此时leader挂了，follower会变成新的leader，此时会重新发送一份数据，会导致数据重复。
+
+

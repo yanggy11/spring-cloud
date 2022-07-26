@@ -1,11 +1,32 @@
 server:
   port: 1986
-
+  undertow:
+    threads:
+      io: 8
+      worker: 256
 spring:
   application:
     name: order-center
   profiles:
     active: test
+  rabbitmq:
+    host: 114.117.210.49
+    port: 5672
+    username: derrick
+    password: ygy250725
+    listener:
+      simple:
+        acknowledge-mode: manual
+        concurrency: 1
+        max-concurrency: 10
+        retry:
+          enabled: true
+        prefetch: 5
+        # 开启发布确认机制
+    publisher-confirm-type: simple
+    publisher-returns: true
+    template:
+      mandatory: true
   cloud:
     nacos:
       discovery:
@@ -20,9 +41,9 @@ spring:
     sentinel:
       eager: true
       transport:
-        dashboard: localhost:8080
+        dashboard: 101.42.97.197:8080
         heartbeatIntervalMs: 10000
-        clientIp: 127.0.0.1
+        clientIp: 101.35.46.92
       datasource:
         ds:
           nacos:
@@ -31,6 +52,12 @@ spring:
             data-id: ${spring.application.name}-sentinel
             group-id: DEFAULT_GROUP
             rule-type: flow
+  data:
+    mongodb:
+      host: 101.35.46.92
+      port: 27017
+      database: mongo
+
 feign:
   sentinel:
     enabled: true
@@ -39,3 +66,17 @@ feign:
       default:
         connect-timeout: 5000
         read-timeout: 5000
+management:
+  endpoints:
+    web:
+      exposure:
+        include: '*'
+  server:
+    port: 30000
+  metrics:
+    tags:
+      application: ${spring.application.name}
+    distribution:
+      percentiles-histogram[http.server.requests]: true
+      maximum-expected-value[http.server.requests]: 10000
+      minimum-expected-value[http.server.requests]: 1

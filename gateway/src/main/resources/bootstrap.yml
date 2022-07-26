@@ -33,6 +33,11 @@ spring:
         dashboard: 101.42.97.197:8080
         heartbeatIntervalMs: 10000
         clientIp: 101.35.46.92
+    stream:
+      kafka:
+        binder:
+          brokers: 101.35.46.92:9092
+          auto-create-topics: true
 
 logging:
   level:

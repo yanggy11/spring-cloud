@@ -1,24 +1,26 @@
 package com.yanggy.user.entity;
 
 import lombok.Data;
-import lombok.ToString;
-import lombok.experimental.Accessors;
 
 import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
- * @Description
- * @Author yang
- * @Date 2022/6/8 16:09
- * @ClassName User
- * @Version 1.0
+ * @author derrick.yang
+ * @Date 9/20/18 09:34
  */
 
 @Data
-@Accessors(chain = true)
-@ToString
-public class User implements Serializable {
-    private Long id;
-    private String name;
+public class User extends BaseEntity implements Serializable {
+    
+	private static final long serialVersionUID = 1582780516468586216L;
+
+	private String name;
+    private String password;
+    private int sex;
     private int age;
+    private String email;
+    private String phone;
+    private String avater;
 }
